@@ -1,0 +1,26 @@
+{% extends 'admin/base.html.twig' %}
+{% block title %}Admin · Users{% endblock %}
+{% block admin_body %}
+<h2>Admin · Users</h2>
+<p><a href="{{ path('admin_user_new') }}">+ New user</a></p>
+<div class="card">
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="text-align:left;padding:6px">Email</th>
+      <th style="text-align:left;padding:6px">Roles</th>
+      <th></th>
+    </tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr style="border-top:1px solid #1f2937">
+        <td style="padding:6px">{{ u.email }}</td>
+        <td style="padding:6px">{{ u.roles|join(', ') }}</td>
+        <td style="text-align:right;padding:6px"><a href="{{ path('admin_user_edit', {id:u.id}) }}">Edit</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" style="padding:6px">No users.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

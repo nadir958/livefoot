@@ -3,37 +3,34 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\Entity\Country;
-use App\Entity\League;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Routing\Annotation\Route;
 
 final class HomeController extends AbstractController
 {
-    #[Route('/', name: 'home')]
-    public function __invoke(EntityManagerInterface $em): Response
+    #[Route('/', name: 'home', methods: ['GET'])]
+    public function __invoke(Request $r): Response
     {
-        $countries = $em->getRepository(Country::class)->createQueryBuilder('c')
-            ->orderBy('c.name', 'ASC')->getQuery()->getResult();
+        // Just render the shell; data is fetched from the admin-filtered APIs:
+        //  - GET /api/countries         (only showOnHome)
+        //  - GET /api/leagues?country=  (only showOnHome)
+        //  - GET /api/matches?...
+        $today = (new \DateTimeImmutable('today', new \DateTimeZone('UTC')))->format('Y-m-d');
 
-        // Pick a reasonable default country & league
-        $defaultCountry = $em->getRepository(Country::class)->findOneBy(['code' => 'MA']) ?? $countries[0] ?? null;
-
-        $defaultLeague = null;
-        if ($defaultCountry) {
-            $defaultLeague = $em->getRepository(League::class)->createQueryBuilder('l')
-                ->join('l.country', 'co')
-                ->andWhere('co.id = :cid')->setParameter('cid', $defaultCountry->getId())
-                ->orderBy('l.name', 'ASC')->setMaxResults(1)->getQuery()->getOneOrNullResult();
-        }
+        // Allow optional preselect via query (?country=FR&league=61&season=2025&date=YYYY-MM-DD&status=finished)
+        $preset = [
+            'country' => $r->query->get('country'),
+            'league'  => $r->query->get('league'),
+            'season'  => $r->query->get('season'),
+            'date'    => $r->query->get('date', $today),
+            'status'  => $r->query->get('status'),
+        ];
 
         return $this->render('home/index.html.twig', [
-            'countries' => $countries,
-            'defaultCountry' => $defaultCountry,
-            'defaultLeague'  => $defaultLeague,
-            'year' => (int)date('Y'),
+            'today'  => $today,
+            'preset' => $preset,
         ]);
     }
 }

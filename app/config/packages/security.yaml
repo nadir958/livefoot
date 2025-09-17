@@ -16,11 +16,19 @@ security:
         main:
             lazy: true
             provider: app_user_provider
-            custom_authenticator: App\Security\AppCustomAuthenticator
+
+            form_login:
+                login_path: app_login
+                check_path: app_login
+                enable_csrf: true
+                username_parameter: email
+                password_parameter: password
             logout:
-                path: app_logout
-                # where to redirect after logout
-                # target: app_any_route
+                path: app_logout      
+                target: /             
+                csrf_token_id: logout 
+                csrf_parameter: _csrf_token
+            # custom_authenticator: App\Security\AppCustomAuthenticator
 
             remember_me:
                 secret: '%kernel.secret%'
@@ -39,7 +47,7 @@ security:
     # Easy way to control access for large sections of your site
     # Note: Only the *first* access control that matches will be used
     access_control:
-        # - { path: ^/admin, roles: ROLE_ADMIN }
+        - { path: ^/admin, roles: ROLE_ADMIN }
         # - { path: ^/profile, roles: ROLE_USER }
 
 when@test:

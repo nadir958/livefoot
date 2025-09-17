@@ -1,150 +1,260 @@
 {% extends 'base.html.twig' %}
+{% block title %}Live Foot — Home{% endblock %}
 
 {% block body %}
-<div class="card">
-  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:end">
-    <div>
-      <label for="country">Country</label><br>
-      <select id="country">
-        {% for c in countries %}
-          <option value="{{ c.code }}" {{ defaultCountry and c.id == defaultCountry.id ? 'selected' }}>{{ c.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <label for="league">League</label><br>
-      <select id="league"></select>
-    </div>
-    <div>
-      <label for="season">Season</label><br>
-      <select id="season">
-        {% for y in range(year - 7, year)|reverse %}
-          <option value="{{ y }}" {{ defaultLeague and y == defaultLeague.seasonCurrent ? 'selected' }}>{{ y }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <label for="date">Date</label><br>
-      <input type="date" id="date">
-    </div>
-    <div>
-      <label for="status">Status</label><br>
-      <select id="status">
-        <option value="">All</option>
-        <option value="scheduled">Scheduled</option>
-        <option value="live">Live</option>
-        <option value="finished">Finished</option>
-      </select>
-    </div>
+<h2 style="margin:0 0 12px 0">Browse matches</h2>
+
+<div class="card" style="display:grid;grid-template-columns:repeat(5, minmax(120px,1fr));gap:10px;align-items:end">
+  <div>
+    <label for="country">Country</label><br>
+    <select id="country"></select>
+  </div>
+
+  <div>
+    <label for="league">League</label><br>
+    <select id="league"></select>
+  </div>
+
+  <div>
+    <label for="season">Season</label><br>
+    <select id="season"></select>
+  </div>
+
+  <div>
+    <label for="date">Date (UTC)</label><br>
+    <input id="date" type="date" value="">
+  </div>
+
+  <div>
+    <label for="status">Status</label><br>
+    <select id="status">
+      <option value="">All</option>
+      <option value="scheduled">Scheduled</option>
+      <option value="live">Live</option>
+      <option value="finished">Finished</option>
+    </select>
   </div>
 </div>
-<div id="liveTicker" class="card" style="display:none">
-  <h3 style="margin:0 0 8px 0">LIVE now</h3>
-  <div id="liveRows"></div>
+
+<div style="margin-top:10px; display:flex; gap:8px; align-items:center">
+  <button id="btnToday" class="btn">Today</button>
+  <button id="btnReset" class="btn" style="opacity:.85">Reset</button>
+
+  {# 🔗 League page button — enabled when a league is selected #}
+  <a id="btnLeague" class="btn" href="#" style="margin-left:auto; opacity:.7; pointer-events:none">Open league page</a>
 </div>
 
+<div id="emptyNotice" class="card" style="display:none; margin-top:12px">
+  <p style="margin:0">No countries or leagues are enabled for the Home screen yet.
+    Go to <a href="/admin/country">Admin → Countries</a> and <a href="/admin/league">Admin → Leagues</a>
+    to toggle <em>Show on Home</em>.
+  </p>
+</div>
+
+<div id="matches" class="card" style="margin-top:12px">
+  <h3 style="margin:0 0 8px 0">Matches</h3>
+  <p id="loading">Loading…</p>
+</div>
+
+<style>
+.btn{ padding:6px 12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#e6edf3; text-decoration:none; display:inline-block }
+.btn[disabled], .btn.disabled{ opacity:.5; pointer-events:none }
+.row{
+  display:grid; grid-template-columns:minmax(110px,140px) 1fr 70px 1fr;
+  gap:10px; align-items:center; padding:10px; border-radius:10px; transition:background .15s ease;
+}
+.row:hover{ background:#0f172a }
+.team{ display:flex; gap:8px; align-items:center; min-width:0 }
+.team img{ width:20px; height:20px; object-fit:contain; border-radius:3px; background:#0b0f14 }
+.ellipsis{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.score{ text-align:center; color:inherit; text-decoration:none }
+.team-link{ color:inherit; text-decoration:none }
+.team-link:hover, .score:hover{ text-decoration:underline }
+</style>
+
 <script>
-(async function liveTicker(){
-  async function load(){
-    const res = await fetch('/api/live?limit=50',{headers:{'Accept':'application/json'}});
-    if(!res.ok) return;
+(function(){
+  const preset = {
+    country: {{ preset.country ? ('"~preset.country~"') : 'null' }},
+    league:  {{ preset.league  ? ('"~preset.league~"')  : 'null' }},
+    season:  {{ preset.season  ? ('"~preset.season~"')  : 'null' }},
+    status:  {{ preset.status  ? ('"~preset.status~"')  : 'null' }},
+  };
+
+  const els = {
+    country: document.getElementById('country'),
+    league:  document.getElementById('league'),
+    season:  document.getElementById('season'),
+    date:    document.getElementById('date'),
+    status:  document.getElementById('status'),
+    matches: document.getElementById('matches'),
+    loading: document.getElementById('loading'),
+    emptyNotice: document.getElementById('emptyNotice'),
+    btnToday: document.getElementById('btnToday'),
+    btnReset: document.getElementById('btnReset'),
+    btnLeague: document.getElementById('btnLeague'),
+  };
+
+  function yearsList(nBack=5){
+    const y = new Date().getUTCFullYear();
+    const arr = [];
+    for (let k = nBack; k >= 0; k--) arr.push(y - k);
+    return arr;
+  }
+  function groupByDate(rows){
+    const map = new Map();
+    for (const r of rows) {
+      const d = new Date(r.dateUtc);
+      const key = d.toISOString().slice(0,10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(r);
+    }
+    return Array.from(map.entries()).sort(([a],[b]) => a.localeCompare(b));
+  }
+  function fmtTime(iso){ return new Date(iso).toISOString().slice(11,16); }
+
+  function updateLeagueButton(){
+    const opt = els.league.selectedOptions[0];
+    if (!opt) {
+      els.btnLeague.classList.add('disabled');
+      els.btnLeague.style.opacity = '.7';
+      els.btnLeague.style.pointerEvents = 'none';
+      els.btnLeague.href = '#';
+      return;
+    }
+    const leagueSlug = opt.dataset.slug;
+    const countrySlug = opt.dataset.countryslug;
+    
+    els.btnLeague.href = `/league/${leagueSlug}`;
+    els.btnLeague.classList.remove('disabled');
+    els.btnLeague.style.opacity = '1';
+    els.btnLeague.style.pointerEvents = '';
+  }
+
+  // Load Country/League options (filtered by Admin flags)
+  async function loadCountries(){
+    const res = await fetch('/api/countries', {headers:{'Accept':'application/json'}, cache:'no-store'});
     const rows = await res.json();
-    const box = document.getElementById('liveTicker');
-    const tgt = document.getElementById('liveRows');
-    if(!rows.length){ box.style.display='none'; return; }
-    box.style.display='';
-    tgt.innerHTML = rows.map(r => `
-      <a class="row" href="/match/${r.id}">
-        <span class="when">LIVE</span>
-        <span class="team ellipsis"><img src="${r.home.logo||''}"> <span class="ellipsis">${r.home.name}</span></span>
-        <span class="score" style="text-align:center">${r.home.goals ?? ''} - ${r.away.goals ?? ''}</span>
-        <span class="team ellipsis" style="justify-self:end"><span class="ellipsis">${r.away.name}</span> <img src="${r.away.logo||''}"></span>
-      </a>
-    `).join('');
+    if (!Array.isArray(rows) || rows.length === 0) {
+      els.emptyNotice.style.display = '';
+      els.loading.textContent = '—';
+      return;
+    }
+    els.emptyNotice.style.display = 'none';
+    els.country.innerHTML = rows.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+    if (preset.country) {
+      const opt = Array.from(els.country.options).find(o => o.value === preset.country);
+      if (opt) els.country.value = preset.country;
+    }
+    await loadLeagues();
   }
-  await load();
-  setInterval(load, 20000); // refresh every 20s
-})();
-</script>
 
+  async function loadLeagues(){
+    const cc = els.country.value;
+    if (!cc) { els.league.innerHTML = ''; updateLeagueButton(); return; }
+    const res = await fetch('/api/leagues?country='+encodeURIComponent(cc), {headers:{'Accept':'application/json'}, cache:'no-store'});
+    const rows = await res.json();
 
-<div id="matches" class="card"></div>
+    // store slug & countrySlug on the option for the League Page button
+    els.league.innerHTML = rows.map(l =>
+      `<option value="${l.id}" data-slug="${l.slug}" data-countryslug="${l.countrySlug}" data-season="${l.season}">${l.name}</option>`
+    ).join('');
 
-<script>
-async function loadLeagues(code){
-  const res = await fetch('/api/leagues?country='+encodeURIComponent(code));
-  const data = await res.json();
-  const sel = document.getElementById('league');
-  sel.innerHTML = data.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
-  return data;
-}
+    // season select
+    const curSeason = (rows[0]?.season) ?? (new Date().getUTCFullYear());
+    const seasons = yearsList(5);
+    els.season.innerHTML = seasons.map(y => `<option value="${y}">${y}</option>`).join('');
+    els.season.value = preset.season ?? curSeason;
 
-function groupByDate(rows){
-  const map = new Map();
-  for (const r of rows) {
-    const d = new Date(r.dateUtc);
-    const key = d.toISOString().slice(0,10); // YYYY-MM-DD
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(r);
+    if (preset.league) {
+      const opt = Array.from(els.league.options).find(o => o.value === preset.league);
+      if (opt) els.league.value = preset.league;
+      preset.league = null; // consume once
+    }
+
+    updateLeagueButton();
+    await loadMatches();
   }
-  // sort keys ascending
-  return Array.from(map.entries()).sort(([a],[b]) => a.localeCompare(b));
-}
 
-async function loadMatches(){
-  const league = document.getElementById('league').value;
-  const season = document.getElementById('season').value;
-  const date   = document.getElementById('date').value;
-  const status = document.getElementById('status').value;
-  const qs = new URLSearchParams({league, season});
-  if (date) qs.set('date', date);
-  if (status) qs.set('status', status);
+  // Render matches list with team links
+  function renderMatches(rows){
+    const groups = groupByDate(rows);
+    const html = ['<h3 style="margin:0 0 8px 0">Matches</h3>'];
+    if (!groups.length) {
+      html.push('<p>No matches for the selected filters.</p>');
+    } else {
+      for (const [day, items] of groups) {
+        html.push(`<h4 style="margin:10px 0 6px 0;opacity:.8">${day}</h4>`);
+        for (const r of items) {
+          html.push(`
+            <div class="row">
+              <span class="when">${fmtTime(r.dateUtc)}</span>
 
-  const res = await fetch('/api/matches?'+qs.toString(), {headers: {'Accept':'application/json'}});
-  const rows = await res.json();
+              <a class="team ellipsis team-link" href="/team/${r.home.slug}">
+                <img src="${r.home.logo||''}" alt="">
+                <span class="ellipsis">${r.home.name}</span>
+              </a>
 
-  const groups = groupByDate(rows);
-  const html = ['<h3 style="margin:0 0 8px 0">Matches</h3>'];
+              <a class="score" href="/match/${r.id}" aria-label="Open match">
+                ${r.home.goals ?? ''} - ${r.away.goals ?? ''}
+              </a>
 
-  if (!groups.length) {
-    html.push('<p>No matches for the selected filters.</p>');
-  } else {
-    for (const [day, items] of groups) {
-      html.push(`<h4 style="margin:10px 0 6px 0;opacity:.8">${day}</h4>`);
-      for (const r of items) {
-        html.push(`
-          <a class="row" href="/match/${r.id}">
-            <span class="when">${new Date(r.dateUtc).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-            <span class="team ellipsis"><img src="${r.home.logo||''}"> <span class="ellipsis">${r.home.name}</span></span>
-            <span class="score" style="text-align:center">${r.home.goals ?? ''} - ${r.away.goals ?? ''}</span>
-            <span class="team ellipsis" style="justify-self:end"><span class="ellipsis">${r.away.name}</span> <img src="${r.away.logo||''}"></span>
-          </a>
-        `);
+              <a class="team ellipsis team-link" href="/team/${r.away.slug}" style="justify-self:end">
+                <span class="ellipsis" style="text-align:right">${r.away.name}</span>
+                <img src="${r.away.logo||''}" alt="">
+              </a>
+            </div>
+          `);
+        }
       }
     }
+    els.matches.innerHTML = html.join('');
   }
-  document.getElementById('matches').innerHTML = html.join('');
-}
 
-document.getElementById('country').addEventListener('change', async (e) => {
-  await loadLeagues(e.target.value);
-  await loadMatches();
-});
-['league','season','date','status'].forEach(id => {
-  document.getElementById(id).addEventListener('change', loadMatches);
-});
+  async function loadMatches(){
+    els.loading && (els.loading.textContent = 'Loading…');
+    const league = els.league.value;
+    const season = els.season.value;
+    const date   = els.date.value;
+    const status = els.status.value;
 
-window.addEventListener('DOMContentLoaded', async () => {
-  const defaultCountryCode = document.getElementById('country').value;
-  const leagues = await loadLeagues(defaultCountryCode);
-  // Select default league if available
-  {% if defaultLeague %}
-  const sel = document.getElementById('league');
-  for (const opt of sel.options) {
-    if (opt.textContent.trim() === '{{ defaultLeague.name|e('js') }}') { opt.selected = true; break; }
+    const qs = new URLSearchParams({ league, season });
+    if (date)   qs.set('date', date);
+    if (status) qs.set('status', status);
+
+    const res = await fetch('/api/matches?'+qs.toString(), {headers:{'Accept':'application/json'}, cache:'no-store'});
+    const rows = await res.json();
+    renderMatches(Array.isArray(rows) ? rows : []);
   }
-  {% endif %}
-  await loadMatches();
-});
+
+  // events
+  els.country.addEventListener('change', loadLeagues);
+  ['league','season','date','status'].forEach(id => {
+    document.getElementById(id).addEventListener('change', (e) => {
+      if (e.target === els.league) updateLeagueButton();
+      loadMatches();
+    });
+  });
+  els.btnToday.addEventListener('click', () => {
+    const d = new Date();
+    const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    els.date.value = utc.toISOString().slice(0,10);
+    loadMatches();
+  });
+  els.btnReset.addEventListener('click', async () => {
+    preset.country = preset.league = preset.season = preset.status = null;
+    els.date.value = '{{ today }}';
+    await loadCountries();
+  });
+
+  // initial run
+  (async () => {
+    if (preset.status) {
+      const opt = Array.from(els.status.options).find(o => o.value === preset.status);
+      if (opt) els.status.value = preset.status;
+    }
+    await loadCountries();
+  })();
+})();
 </script>
 {% endblock %}

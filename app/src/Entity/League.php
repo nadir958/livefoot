@@ -44,6 +44,12 @@ class League
     #[ORM\Column(type: 'datetime_immutable')]
     private \DateTimeImmutable $updatedAt;
 
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $showOnHome = false;
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $homeSort = null;
+
     public function __construct(
         int $externalId = 0,
         Country $country = null,
@@ -102,4 +108,10 @@ class League
 
     public function getCreatedAt(): \DateTimeImmutable { return $this->createdAt; }
     public function getUpdatedAt(): \DateTimeImmutable { return $this->updatedAt; }
+
+    public function isShowOnHome(): bool { return $this->showOnHome; }
+    public function setShowOnHome(bool $v): self { $this->showOnHome = $v; return $this; }
+
+    public function getHomeSort(): ?int { return $this->homeSort; }
+    public function setHomeSort(?int $v): self { $this->homeSort = $v; return $this; }
 }

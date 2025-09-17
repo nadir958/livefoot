@@ -1,0 +1,45 @@
+{# templates/admin/_header.html.twig #}
+{% set r = app.request.attributes.get('_route') %}
+
+<header class="admin-header">
+  <nav class="admin-nav">
+    <a class="brand" href="{{ path('admin_home') }}">Admin</a>
+
+    <a href="{{ path('admin_country_index') }}" class="{{ r starts with 'admin_country_' ? 'active' : '' }}">
+      Countries
+    </a>
+    <a href="{{ path('admin_league_index') }}" class="{{ r starts with 'admin_league_' ? 'active' : '' }}">
+      Leagues
+    </a>
+    <a href="{{ path('admin_user_index') }}" class="{{ r starts with 'admin_user_' ? 'active' : '' }}">
+      Users
+    </a>
+
+    <form action="{{ path('app_logout') }}" method="post" class="logout">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token('logout') }}">
+      <button type="submit" class="btn btn-logout">Log out</button>
+    </form>
+  </nav>
+</header>
+
+<style>
+.admin-header{ margin-bottom:12px }
+.admin-nav{
+  display:flex; align-items:center; gap:10px;
+  padding:10px; border:1px solid #1f2937; border-radius:12px;
+  background:#0b0f14;
+}
+.admin-nav .brand{
+  font-weight:600; padding:6px 10px; border-radius:8px;
+  background:#111827; border:1px solid #1f2937; color:#e6edf3; text-decoration:none;
+}
+.admin-nav a{
+  padding:6px 10px; border-radius:999px; text-decoration:none; color:#e6edf3;
+  border:1px solid transparent;
+}
+.admin-nav a.active{ border-color:#334155; background:#111827 }
+.admin-nav .logout{ margin-left:auto }
+.btn{ padding:6px 12px; border-radius:10px; border:1px solid #374151; background:#1f2937; color:#e6edf3; cursor:pointer }
+.btn-logout{ background:#7f1d1d; border-color:#7f1d1d }
+.btn-logout:hover{ filter:brightness(1.1) }
+</style>

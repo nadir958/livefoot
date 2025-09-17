@@ -1,0 +1,33 @@
+{% extends 'admin/base.html.twig' %}
+{% block title %}Admin · Countries{% endblock %}
+{% block admin_body %}
+<h2>Admin · Countries</h2>
+<div class="card">
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:6px">Code</th>
+        <th style="text-align:left;padding:6px">Name</th>
+        <th>Show</th>
+        <th>Sort</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in countries %}
+        <tr style="border-top:1px solid #1f2937">
+          <td style="padding:6px">{{ c.code }}</td>
+          <td style="padding:6px">{{ c.name }}</td>
+          <td style="text-align:center">{{ c.showOnHome ? '✓' : '—' }}</td>
+          <td style="text-align:center">{{ c.homeSort ?? '—' }}</td>
+          <td style="text-align:right;padding:6px">
+            <a href="{{ path('admin_country_edit', {id: c.id}) }}">Edit</a>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" style="padding:6px">No countries.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -4,39 +4,48 @@ declare(strict_types=1);
 namespace App\Controller\Api;
 
 use App\Entity\Fixture;
+use App\Entity\League;
 use App\Enum\MatchStatus;
 use App\Repository\FixtureRepository;
-use App\Entity\League;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\HttpFoundation\Request;
-use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Routing\Annotation\Route;
 
 final class MatchApiController extends AbstractController
 {
-    public function __construct(private FixtureRepository $repo) {}
+    public function __construct(
+        private FixtureRepository $repo,
+        private EntityManagerInterface $em
+    ) {}
 
     #[Route('/api/matches', name: 'api_matches', methods: ['GET'])]
-    public function __invoke(Request $r, EntityManagerInterface $em): JsonResponse
+    public function __invoke(Request $r): JsonResponse
     {
-        $leagueId   = $r->query->getInt('league') ?: null;
-        $leagueSlug = $r->query->get('league_slug') ?: null;
+        $leagueId   = $r->query->get('league');      // id or null
+        $leagueSlug = $r->query->get('league_slug'); // optional
         $season     = $r->query->getInt('season') ?: null;
-        $dateStr    = $r->query->get('date') ?: null;
-        $statusStr  = $r->query->get('status') ?: null;
+        $dateStr    = $r->query->get('date') ?: null;     // YYYY-MM-DD (UTC)
+        $statusStr  = $r->query->get('status') ?: null;   // scheduled|live|finished
 
-        // Accept league by id OR slug
+        // Resolve league id if slug provided (or if league is a non-digit string)
         if (!$leagueId && $leagueSlug) {
-            $league = $em->getRepository(League::class)->findOneBy(['slug' => $leagueSlug]);
+            $league = $this->em->getRepository(League::class)->findOneBy(['slug' => (string)$leagueSlug]);
             $leagueId = $league?->getId();
+        } elseif (\is_string($leagueId) && !ctype_digit($leagueId)) {
+            $league = $this->em->getRepository(League::class)->findOneBy(['slug' => (string)$leagueId]);
+            $leagueId = $league?->getId();
+        } elseif ($leagueId !== null) {
+            $leagueId = (int)$leagueId;
         }
 
-        $date = $dateStr ? new \DateTimeImmutable($dateStr . ' 00:00:00', new \DateTimeZone('UTC')) : null;
-        $status = $statusStr ? MatchStatus::from($statusStr) : null;
+        $date   = $dateStr ? new \DateTimeImmutable($dateStr.' 00:00:00', new \DateTimeZone('UTC')) : null;
+        $status = $statusStr ? MatchStatus::from((string)$statusStr) : null;
 
         $items = $this->repo->findByFilters($leagueId, $season, $date, $status);
 
+        // 🔗 Include team slugs so the UI can link to /team/{slug}
         $out = array_map(function (Fixture $m) {
             return [
                 'id'      => $m->getId(),
@@ -46,20 +55,25 @@ final class MatchApiController extends AbstractController
                 'stage'   => $m->getStage(),
                 'venue'   => $m->getVenue(),
                 'home'    => [
-                    'id'   => $m->getHomeTeam()->getId(),
-                    'name' => $m->getHomeTeam()->getName(),
-                    'logo' => $m->getHomeTeam()->getLogo(),
-                    'goals'=> $m->getHomeScore(),
+                    'id'    => $m->getHomeTeam()->getId(),
+                    'slug'  => $m->getHomeTeam()->getSlug(),
+                    'name'  => $m->getHomeTeam()->getName(),
+                    'logo'  => $m->getHomeTeam()->getLogo(),
+                    'goals' => $m->getHomeScore(),
                 ],
                 'away'    => [
-                    'id'   => $m->getAwayTeam()->getId(),
-                    'name' => $m->getAwayTeam()->getName(),
-                    'logo' => $m->getAwayTeam()->getLogo(),
-                    'goals'=> $m->getAwayScore(),
+                    'id'    => $m->getAwayTeam()->getId(),
+                    'slug'  => $m->getAwayTeam()->getSlug(),
+                    'name'  => $m->getAwayTeam()->getName(),
+                    'logo'  => $m->getAwayTeam()->getLogo(),
+                    'goals' => $m->getAwayScore(),
                 ],
             ];
         }, $items);
 
-        return $this->json($out);
+        $res = $this->json($out);
+        // No caching while iterating on UI
+        $res->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        return $res;
     }
 }

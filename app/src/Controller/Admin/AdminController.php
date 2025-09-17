@@ -5,16 +5,14 @@ namespace App\Controller\Admin;
 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Routing\Annotation\Route;
 
+#[Route('/admin', name: 'admin_')]
 final class AdminController extends AbstractController
 {
-    #[Route('/admin', name: 'admin_index', methods: ['GET'])]
-    public function index(): Response
+    #[Route('/', name: 'home')]
+    public function __invoke(): Response
     {
-        // Protect if needed: $this->denyAccessUnlessGranted('ROLE_EDITOR');
-        return $this->render('admin/index.html.twig', [
-            'kpis' => ['live' => 0, 'today' => 0, 'apiErrors' => 0],
-        ]);
+        return $this->render('admin/index.html.twig');
     }
 }

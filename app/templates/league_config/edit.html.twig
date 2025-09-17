@@ -1,0 +1,13 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Edit LeagueConfig{% endblock %}
+
+{% block body %}
+    <h1>Edit LeagueConfig</h1>
+
+    {{ include('league_config/_form.html.twig', {'button_label': 'Update'}) }}
+
+    <a href="{{ path('app_league_config_index') }}">back to list</a>
+
+    {{ include('league_config/_delete_form.html.twig') }}
+{% endblock %}

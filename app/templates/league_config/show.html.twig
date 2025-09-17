@@ -1,0 +1,105 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ league.name }} — Saison {{ season }}{% endblock %}
+
+{% block body %}
+  <h1 class="mb-2">
+    {{ league.name }}
+    {% if league.country %}<small>({{ league.country }})</small>{% endif %}
+  </h1>
+
+  {# --- Season filter (GET) --- #}
+  <form method="get" action="{{ path('league_show', { slug: slug, season: season, tab: key }) }}" class="season-form" style="margin-bottom:1rem;">
+    <label for="season">Saison&nbsp;</label>
+    <select id="season" name="season">
+      {% for y in seasons %}
+        <option value="{{ y }}" {{ y == season ? 'selected' : '' }}>{{ y }}</option>
+      {% endfor %}
+    </select>
+    {# keep the active tab on submit #}
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <button type="submit">Appliquer</button>
+  </form>
+
+  {# --- Tabs nav (accessible, supports ?tab= fallback) --- #}
+  {% set tabs = {
+    'standings': 'Classement',
+    'fixtures':  'Calendrier',
+    'results':   'Résultats'
+  } %}
+
+  <nav class="tabs" style="margin-bottom:1rem;display:flex;gap:.5rem;">
+    {% for key,label in tabs %}
+      <a
+        href="{{ path('league_show', {slug: slug, season: season, tab: key}) }}"
+        class="tab-link {{ tab == key ? 'active' : '' }}"
+        data-tab="{{ key }}"
+        style="padding:.5rem .75rem;border:1px solid #ddd;border-bottom:none;border-radius:.4rem .4rem 0 0;background:{{ tab == key ? '#fff' : '#f3f3f3' }};text-decoration:none;color:#333;"
+      >{{ label }}</a>
+    {% endfor %}
+  </nav>
+
+  <section class="tab-panels" style="border:1px solid #ddd;padding:1rem;border-radius:0 .4rem .4rem .4rem;background:#fff;">
+    {# --- Standings panel --- #}
+    <div id="panel-standings" class="tab-panel" style="{{ tab != 'standings' ? 'display:none' : '' }}">
+      <h2>Classement — {{ season }}</h2>
+      {% include 'league/_standings_table.html.twig' with { standings: standings } %}
+    </div>
+
+    {# --- Fixtures panel --- #}
+    <div id="panel-fixtures" class="tab-panel" style="{{ tab != 'fixtures' ? 'display:none' : '' }}">
+      <h2>Calendrier ({{ from|date('Y-m-d') }} → {{ to|date('Y-m-d') }})</h2>
+      <ul class="fixtures">
+        {% for f in fixtures %}
+          {% include 'components/_fixture_row.html.twig' with { f: f } %}
+        {% else %}
+          <li>Pas de rencontres dans la fenêtre sélectionnée.</li>
+        {% endfor %}
+      </ul>
+      <p style="margin-top:.5rem;">
+        <a href="{{ path('league_show', { slug: slug, season:season, tab:'fixtures' }) }}">Rafraîchir</a>
+      </p>
+    </div>
+
+    {# --- Results panel --- #}
+    <div id="panel-results" class="tab-panel" style="{{ tab != 'results' ? 'display:none' : '' }}">
+      <h2>Résultats récents</h2>
+      <ul class="results">
+        {% for f in results %}
+          {% include 'components/_fixture_row.html.twig' with { f: f } %}
+        {% else %}
+          <li>Aucun résultat récent.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+
+  {# --- Minimal JS enhancement: click tabs without full page reload --- #}
+  <script>
+    (function(){
+      const links = document.querySelectorAll('.tab-link');
+      const panels = {
+        standings: document.getElementById('panel-standings'),
+        fixtures: document.getElementById('panel-fixtures'),
+        results:  document.getElementById('panel-results'),
+      };
+      links.forEach(a => {
+        a.addEventListener('click', function(e){
+          e.preventDefault();
+          const key = this.dataset.tab;
+          // toggle active class
+          links.forEach(l => l.classList.toggle('active', l === this));
+          // show panel
+          Object.keys(panels).forEach(k => panels[k].style.display = (k === key) ? '' : 'none');
+          // sync hidden input in season form
+          const form = document.querySelector('.season-form');
+          if (form) { form.querySelector('input[name="tab"]').value = key; }
+          // push URL with ?tab=
+          const url = new URL(window.location);
+          url.searchParams.set('tab', key);
+          history.replaceState(null, '', url.toString());
+        });
+      });
+    })();
+  </script>
+{% endblock %}

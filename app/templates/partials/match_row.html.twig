@@ -1,0 +1,48 @@
+{# templates/partials/match_row_teams_clickable.html.twig #}
+<div class="row">
+  <span class="when">{{ m.dateUtc|date('Y-m-d H:i') }}</span>
+
+  <a class="team ellipsis team-link" href="{{ path('team_show', {slug: m.homeTeam.slug}) }}">
+    <img src="{{ m.homeTeam.logo ?? '' }}" alt="">
+    <span class="ellipsis">{{ m.homeTeam.name }}</span>
+  </a>
+
+  <a class="score score-link" href="{{ path('match_show', {id: m.id}) }}" style="text-align:center">
+    {{ m.homeScore is not null ? m.homeScore : '' }} - {{ m.awayScore is not null ? m.awayScore : '' }}
+  </a>
+
+  <a class="team ellipsis team-link" href="{{ path('team_show', {slug: m.awayTeam.slug}) }}" style="justify-self:end">
+    <span class="ellipsis" style="text-align:right">{{ m.awayTeam.name }}</span>
+    <img src="{{ m.awayTeam.logo ?? '' }}" alt="">
+  </a>
+</div>
+
+
+
+<style>
+.row{
+  display:grid;
+  grid-template-columns:minmax(110px,140px) 1fr 60px 1fr;
+  gap:10px; align-items:center;
+  padding:10px; border-radius:10px;
+  transition:background .15s ease;
+}
+.row:hover{ background:#0f172a }
+
+/* Team cells */
+.team{display:flex; gap:8px; align-items:center; min-width:0}
+.team img{width:20px; height:20px; object-fit:contain; border-radius:3px; background:#0b0f14}
+.ellipsis{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+/* Tabs look/active state */
+.tabs a{
+  margin-right:10px; padding:6px 12px; border-radius:999px;
+  border:1px solid #1f2937; color:#e6edf3;
+}
+.tabs a.active{ background:#1f2937; border-color:#303949 }
+
+.row .team-link,
+.row .score-link { color: inherit; text-decoration: none; }
+.row .score-link:hover,
+.row .team-link:hover { text-decoration: underline; }
+</style>

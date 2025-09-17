@@ -1,0 +1,28 @@
+<table style="width:100%;border-collapse:collapse;">
+  <thead>
+    <tr>
+      <th style="text-align:left;">#</th>
+      <th style="text-align:left;">Équipe</th>
+      <th>MP</th><th>W</th><th>D</th><th>L</th>
+      <th>GF</th><th>GA</th><th>GD</th><th>Pts</th>
+      <th>Forme</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in standings %}
+      <tr>
+        <td>{{ r.rank }}</td>
+        <td>{{ r.team }}</td>
+        <td style="text-align:center">{{ r.mp }}</td>
+        <td style="text-align:center">{{ r.w }}</td>
+        <td style="text-align:center">{{ r.d }}</td>
+        <td style="text-align:center">{{ r.l }}</td>
+        <td style="text-align:center">{{ r.gf }}</td>
+        <td style="text-align:center">{{ r.ga }}</td>
+        <td style="text-align:center">{{ r.gd }}</td>
+        <td style="text-align:center"><strong>{{ r.pts }}</strong></td>
+        <td><small>{{ r.form }}</small></td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>

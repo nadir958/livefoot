@@ -1,0 +1,150 @@
+{% extends 'base.html.twig' %}
+
+{% block body %}
+<div class="card">
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:end">
+    <div>
+      <label for="country">Country</label><br>
+      <select id="country">
+        {% for c in countries %}
+          <option value="{{ c.code }}" {{ defaultCountry and c.id == defaultCountry.id ? 'selected' }}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="league">League</label><br>
+      <select id="league"></select>
+    </div>
+    <div>
+      <label for="season">Season</label><br>
+      <select id="season">
+        {% for y in range(year - 7, year)|reverse %}
+          <option value="{{ y }}" {{ defaultLeague and y == defaultLeague.seasonCurrent ? 'selected' }}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="date">Date</label><br>
+      <input type="date" id="date">
+    </div>
+    <div>
+      <label for="status">Status</label><br>
+      <select id="status">
+        <option value="">All</option>
+        <option value="scheduled">Scheduled</option>
+        <option value="live">Live</option>
+        <option value="finished">Finished</option>
+      </select>
+    </div>
+  </div>
+</div>
+<div id="liveTicker" class="card" style="display:none">
+  <h3 style="margin:0 0 8px 0">LIVE now</h3>
+  <div id="liveRows"></div>
+</div>
+
+<script>
+(async function liveTicker(){
+  async function load(){
+    const res = await fetch('/api/live?limit=50',{headers:{'Accept':'application/json'}});
+    if(!res.ok) return;
+    const rows = await res.json();
+    const box = document.getElementById('liveTicker');
+    const tgt = document.getElementById('liveRows');
+    if(!rows.length){ box.style.display='none'; return; }
+    box.style.display='';
+    tgt.innerHTML = rows.map(r => `
+      <a class="row" href="/match/${r.id}">
+        <span class="when">LIVE</span>
+        <span class="team ellipsis"><img src="${r.home.logo||''}"> <span class="ellipsis">${r.home.name}</span></span>
+        <span class="score" style="text-align:center">${r.home.goals ?? ''} - ${r.away.goals ?? ''}</span>
+        <span class="team ellipsis" style="justify-self:end"><span class="ellipsis">${r.away.name}</span> <img src="${r.away.logo||''}"></span>
+      </a>
+    `).join('');
+  }
+  await load();
+  setInterval(load, 20000); // refresh every 20s
+})();
+</script>
+
+
+<div id="matches" class="card"></div>
+
+<script>
+async function loadLeagues(code){
+  const res = await fetch('/api/leagues?country='+encodeURIComponent(code));
+  const data = await res.json();
+  const sel = document.getElementById('league');
+  sel.innerHTML = data.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+  return data;
+}
+
+function groupByDate(rows){
+  const map = new Map();
+  for (const r of rows) {
+    const d = new Date(r.dateUtc);
+    const key = d.toISOString().slice(0,10); // YYYY-MM-DD
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  }
+  // sort keys ascending
+  return Array.from(map.entries()).sort(([a],[b]) => a.localeCompare(b));
+}
+
+async function loadMatches(){
+  const league = document.getElementById('league').value;
+  const season = document.getElementById('season').value;
+  const date   = document.getElementById('date').value;
+  const status = document.getElementById('status').value;
+  const qs = new URLSearchParams({league, season});
+  if (date) qs.set('date', date);
+  if (status) qs.set('status', status);
+
+  const res = await fetch('/api/matches?'+qs.toString(), {headers: {'Accept':'application/json'}});
+  const rows = await res.json();
+
+  const groups = groupByDate(rows);
+  const html = ['<h3 style="margin:0 0 8px 0">Matches</h3>'];
+
+  if (!groups.length) {
+    html.push('<p>No matches for the selected filters.</p>');
+  } else {
+    for (const [day, items] of groups) {
+      html.push(`<h4 style="margin:10px 0 6px 0;opacity:.8">${day}</h4>`);
+      for (const r of items) {
+        html.push(`
+          <a class="row" href="/match/${r.id}">
+            <span class="when">${new Date(r.dateUtc).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+            <span class="team ellipsis"><img src="${r.home.logo||''}"> <span class="ellipsis">${r.home.name}</span></span>
+            <span class="score" style="text-align:center">${r.home.goals ?? ''} - ${r.away.goals ?? ''}</span>
+            <span class="team ellipsis" style="justify-self:end"><span class="ellipsis">${r.away.name}</span> <img src="${r.away.logo||''}"></span>
+          </a>
+        `);
+      }
+    }
+  }
+  document.getElementById('matches').innerHTML = html.join('');
+}
+
+document.getElementById('country').addEventListener('change', async (e) => {
+  await loadLeagues(e.target.value);
+  await loadMatches();
+});
+['league','season','date','status'].forEach(id => {
+  document.getElementById(id).addEventListener('change', loadMatches);
+});
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const defaultCountryCode = document.getElementById('country').value;
+  const leagues = await loadLeagues(defaultCountryCode);
+  // Select default league if available
+  {% if defaultLeague %}
+  const sel = document.getElementById('league');
+  for (const opt of sel.options) {
+    if (opt.textContent.trim() === '{{ defaultLeague.name|e('js') }}') { opt.selected = true; break; }
+  }
+  {% endif %}
+  await loadMatches();
+});
+</script>
+{% endblock %}

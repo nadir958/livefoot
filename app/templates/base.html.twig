@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Sofascore-like{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#0b0f14;color:#e6edf3}
+    header,main{max-width:1100px;margin:0 auto;padding:16px}
+    a{color:#7aa2f7;text-decoration:none}
+    .card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px;margin:8px 0}
+    .row{display:grid;grid-template-columns:140px 1fr 60px 1fr;gap:8px;align-items:center;padding:8px;border-radius:10px}
+    .row:hover{background:#0f172a}
+    .team{display:flex;gap:8px;align-items:center;min-width:0}
+    .team img{width:20px;height:20px;border-radius:3px;object-fit:contain;background:#0b0f14}
+    .ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .badge{font-size:12px;padding:2px 6px;border-radius:999px;border:1px solid #374151}
+    .status.live{color:#fca5a5;border-color:#fca5a5}
+    .status.scheduled{color:#a7f3d0;border-color:#a7f3d0}
+    .status.finished{color:#93c5fd;border-color:#93c5fd}
+    .grid{display:grid;gap:12px}
+    .tabs a{margin-right:10px;padding:6px 10px;border-radius:999px;border:1px solid #374151}
+    .tabs a.active{background:#1f2937}
+    label{font-size:12px;color:#9ca3af}
+    select,input[type=date]{background:#0b1220;color:#e6edf3;border:1px solid #1f2937;border-radius:8px;padding:6px}
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<header>
+  <h1 style="margin:0">Sofascore-like</h1>
+</header>
+<main>
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

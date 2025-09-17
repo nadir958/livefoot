@@ -1,0 +1,9 @@
+<li style="padding:.25rem 0;border-bottom:1px solid #eee;">
+  <span style="color:#666;">{{ f.leagueName }}</span> —
+  <strong>{{ f.homeName }}</strong> {{ f.homeGoals is not null ? f.homeGoals : '' }}
+  -
+  {{ f.awayGoals is not null ? f.awayGoals : '' }} <strong>{{ f.awayName }}</strong>
+  <small style="color:#888;">
+    ({{ f.status }}{% if f.minute %} {{ f.minute }}’{% endif %}, {{ f.kickoff|date('Y-m-d H:i') }})
+  </small>
+</li>

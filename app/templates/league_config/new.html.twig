@@ -1,0 +1,11 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}New LeagueConfig{% endblock %}
+
+{% block body %}
+    <h1>Create new LeagueConfig</h1>
+
+    {{ include('league_config/_form.html.twig') }}
+
+    <a href="{{ path('app_league_config_index') }}">back to list</a>
+{% endblock %}

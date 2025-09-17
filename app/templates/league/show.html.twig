@@ -1,0 +1,108 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ league.name }} — {{ season }}{% endblock %}
+
+{% block body %}
+<header style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+  {% if league.logo %}
+    <img src="{{ league.logo }}" alt="" style="width:36px;height:36px;object-fit:contain;border-radius:6px;background:#0b0f14;border:1px solid #1f2937">
+  {% endif %}
+  <div>
+    <h2 style="margin:0">{{ league.name }} — {{ season }}</h2>
+    <div style="opacity:.7;font-size:13px">{{ league.country.name }}</div>
+  </div>
+</header>
+
+<nav class="tabs" style="margin-bottom:12px">
+  <a href="?tab=standings&season={{ season }}" class="{{ tab == 'standings' ? 'active' : '' }}">Standings</a>
+  <a href="?tab=calendar&season={{ season }}"   class="{{ tab == 'calendar'   ? 'active' : '' }}">Calendar</a>
+  <a href="?tab=results&season={{ season }}"    class="{{ tab == 'results'    ? 'active' : '' }}">Results</a>
+</nav>
+
+{% if tab == 'standings' %}
+  <div id="standings" class="card">
+    <h3 style="margin:0 0 8px 0">Standings</h3>
+    <p>Loading…</p>
+  </div>
+
+  <script>
+  async function loadStandings() {
+    const url = '/api/standings?league={{ league.id }}&season={{ season }}';
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      document.getElementById('standings').innerHTML = '<h3 style="margin:0 0 8px 0">Standings</h3><p>No data.</p>';
+      return;
+    }
+    const rows = data;
+
+    const head = `
+      <div style="overflow:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:6px">#</th>
+            <th style="text-align:left;padding:6px">Team</th>
+            <th style="text-align:center;padding:6px">P</th>
+            <th style="text-align:center;padding:6px">W</th>
+            <th style="text-align:center;padding:6px">D</th>
+            <th style="text-align:center;padding:6px">L</th>
+            <th style="text-align:center;padding:6px">GF</th>
+            <th style="text-align:center;padding:6px">GA</th>
+            <th style="text-align:center;padding:6px">GD</th>
+            <th style="text-align:center;padding:6px">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    const body = rows.map((r, i) => `
+      <tr style="border-top:1px solid #1f2937">
+        <td style="padding:6px">${i+1}</td>
+        <td style="padding:6px;display:flex;gap:8px;align-items:center;min-width:200px">
+          <img src="${r.logo||''}" alt="" style="width:18px;height:18px;object-fit:contain;border-radius:3px;background:#0b0f14">
+          <span>${r.teamName}</span>
+        </td>
+        <td style="text-align:center;padding:6px">${r.played}</td>
+        <td style="text-align:center;padding:6px">${r.wins}</td>
+        <td style="text-align:center;padding:6px">${r.draws}</td>
+        <td style="text-align:center;padding:6px">${r.losses}</td>
+        <td style="text-align:center;padding:6px">${r.gf}</td>
+        <td style="text-align:center;padding:6px">${r.ga}</td>
+        <td style="text-align:center;padding:6px">${r.gd}</td>
+        <td style="text-align:center;padding:6px;font-weight:600">${r.points}</td>
+      </tr>
+    `).join('');
+
+    const foot = '</tbody></table></div>';
+
+    document.getElementById('standings').innerHTML =
+      '<h3 style="margin:0 0 8px 0">Standings</h3>' + head + body + foot;
+  }
+  loadStandings();
+  </script>
+
+{% else %}
+  {# Default view: Upcoming and Recent (uses variables passed by the controller) #}
+  <div class="grid">
+    <div class="card">
+      <h3 style="margin:0 0 8px 0">Upcoming</h3>
+      {% for m in upcoming %}
+        {% include 'partials/match_row.html.twig' with { m: m } %}
+      {% else %}
+        <p>No upcoming matches.</p>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px 0">Recent</h3>
+      {% for m in past %}
+        {% include 'partials/match_row.html.twig' with { m: m } %}
+      {% else %}
+        <p>No recent matches.</p>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}

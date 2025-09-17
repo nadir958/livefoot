@@ -1,0 +1,27 @@
+# see https://symfony.com/doc/current/reference/configuration/framework.html
+framework:
+  secret: '%env(APP_SECRET)%'
+  session:
+    handler_id: null
+    cookie_secure: auto
+    cookie_samesite: lax
+
+  http_client:
+    scoped_clients:
+      apifootball:
+        base_uri: '%env(resolve:API_FOOTBALL_BASE)%'
+        headers:
+          x-apisports-key: '%env(API_FOOTBALL_KEY)%'
+          Accept: 'application/json'
+        retry_failed:
+          max_retries: 2
+          delay: 500       # ms
+          multiplier: 2
+          max_delay: 2000
+
+
+when@test:
+    framework:
+        test: true
+        session:
+            storage_factory_id: session.storage.factory.mock_file

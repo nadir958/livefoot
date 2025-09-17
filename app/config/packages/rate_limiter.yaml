@@ -1,0 +1,8 @@
+framework:
+  rate_limiter:
+
+    # 60 requests per minute per key (we’ll key by client IP in the controller)
+    public_api:
+      policy: fixed_window
+      limit: 60
+      interval: '1 minute'

@@ -1,0 +1,34 @@
+{% extends 'base.html.twig' %}
+{% block title %}{{ team.name }}{% endblock %}
+
+{% block body %}
+<header style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+  {% if team.logo %}
+    <img src="{{ team.logo }}" alt="" style="width:44px;height:44px;object-fit:contain;border-radius:6px;background:#0b0f14;border:1px solid #1f2937">
+  {% endif %}
+  <div>
+    <h2 style="margin:0">{{ team.name }}</h2>
+    <div style="opacity:.7;font-size:13px">{{ team.country.name }}</div>
+  </div>
+</header>
+
+<div class="grid">
+  <div class="card">
+    <h3 style="margin:0 0 8px 0">Upcoming</h3>
+    {% for m in upcoming %}
+      {% include 'partials/match_row.html.twig' with { m: m } %}
+    {% else %}
+      <p>No upcoming matches.</p>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 8px 0">Recent</h3>
+    {% for m in past %}
+      {% include 'partials/match_row.html.twig' with { m: m } %}
+    {% else %}
+      <p>No recent matches.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends 'base.html.twig' %}
+{% block title %}Match {{ m.homeTeam.name }} - {{ m.awayTeam.name }}{% endblock %}
+{% block body %}
+<div class="card" id="match-card" data-id="{{ m.id }}">
+  <h2 style="margin:0 0 12px 0">
+    <span id="homeName">{{ m.homeTeam.name }}</span> vs <span id="awayName">{{ m.awayTeam.name }}</span>
+    <span id="statusBadge" class="badge status {{ m.status.value }}">{{ m.status.value }}</span>
+  </h2>
+  <p style="margin:6px 0">Date (UTC): <span id="dateUtc">{{ m.dateUtc|date('Y-m-d H:i') }}</span></p>
+  {% if m.stage %}<p style="margin:6px 0">Stage: <span id="stage">{{ m.stage }}</span></p>{% endif %}
+  {% if m.venue %}<p style="margin:6px 0">Venue: <span id="venue">{{ m.venue }}</span></p>{% endif %}
+  <p id="scoreLine" style="margin:6px 0; font-size:28px">
+    {{ m.homeScore is not null ? m.homeScore : '–' }} : {{ m.awayScore is not null ? m.awayScore : '–' }}
+  </p>
+</div>
+
+<script>
+(function(){
+  const card = document.getElementById('match-card');
+  const id = card.dataset.id;
+  const scoreEl = document.getElementById('scoreLine');
+  const badge = document.getElementById('statusBadge');
+  const dateEl = document.getElementById('dateUtc');
+
+  function applyStatusClass(status){
+    badge.classList.remove('scheduled','live','finished');
+    badge.classList.add(status);
+  }
+
+  async function refresh(){
+    try{
+      const res = await fetch('/api/match/'+id, {headers:{'Accept':'application/json'}});
+      if(!res.ok) return;
+      const r = await res.json();
+
+      // names/logos unlikely to change, but safe to update score/status/date
+      scoreEl.textContent = `${r.home.goals ?? '–'} : ${r.away.goals ?? '–'}`;
+      badge.textContent = r.status;
+      applyStatusClass(r.status);
+      dateEl.textContent = new Date(r.dateUtc).toISOString().slice(0,16).replace('T',' '); // UTC
+
+    }catch(e){ /* ignore transient errors */ }
+  }
+
+  // initial + every 15s (tweak if you want)
+  refresh();
+  setInterval(refresh, 15000);
+})();
+</script>
+{% endblock %}

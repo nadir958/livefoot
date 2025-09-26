@@ -23,30 +23,58 @@ final class MatchApiController extends AbstractController
     #[Route('/api/matches', name: 'api_matches', methods: ['GET'])]
     public function __invoke(Request $r): JsonResponse
     {
-        $leagueId   = $r->query->get('league');      // id or null
-        $leagueSlug = $r->query->get('league_slug'); // optional
+        $leagueId   = $r->query->get('league');       // id or slug or null
+        $leagueSlug = $r->query->get('league_slug');  // optional explicit slug
         $season     = $r->query->getInt('season') ?: null;
         $dateStr    = $r->query->get('date') ?: null;     // YYYY-MM-DD (UTC)
         $statusStr  = $r->query->get('status') ?: null;   // scheduled|live|finished
+        $limit      = \min(\max($r->query->getInt('limit', 10), 1), 50); // clamp 1..50
+        $offset     = \max($r->query->getInt('offset', 0), 0);
 
-        // Resolve league id if slug provided (or if league is a non-digit string)
+        // Resolve league id from slug if needed
         if (!$leagueId && $leagueSlug) {
-            $league = $this->em->getRepository(League::class)->findOneBy(['slug' => (string)$leagueSlug]);
+            $league = $this->em->getRepository(League::class)->findOneBy(['slug' => (string) $leagueSlug]);
             $leagueId = $league?->getId();
         } elseif (\is_string($leagueId) && !ctype_digit($leagueId)) {
-            $league = $this->em->getRepository(League::class)->findOneBy(['slug' => (string)$leagueId]);
+            // league provided but not a number → treat as slug
+            $league = $this->em->getRepository(League::class)->findOneBy(['slug' => (string) $leagueId]);
             $leagueId = $league?->getId();
         } elseif ($leagueId !== null) {
-            $leagueId = (int)$leagueId;
+            $leagueId = (int) $leagueId;
         }
 
-        $date   = $dateStr ? new \DateTimeImmutable($dateStr.' 00:00:00', new \DateTimeZone('UTC')) : null;
-        $status = $statusStr ? MatchStatus::from((string)$statusStr) : null;
+        // Parse date safely (expecting YYYY-MM-DD in UTC)
+        $date = null;
+        if ($dateStr) {
+            try {
+                $date = new \DateTimeImmutable($dateStr . ' 00:00:00', new \DateTimeZone('UTC'));
+            } catch (\Exception) {
+                return $this->badRequest('Invalid date format. Expected YYYY-MM-DD in UTC.');
+            }
+        }
 
-        $items = $this->repo->findByFilters($leagueId, $season, $date, $status);
+        // Parse status safely
+        $status = null;
+        if ($statusStr) {
+            try {
+                $status = MatchStatus::from((string) $statusStr);
+            } catch (\ValueError) {
+                return $this->badRequest('Invalid status. Allowed: scheduled | live | finished.');
+            }
+        }
 
-        // 🔗 Include team slugs so the UI can link to /team/{slug}
-        $out = array_map(function (Fixture $m) {
+        // Query
+        $items = $this->repo->findByFilters(
+            $leagueId,
+            $season,
+            $date,
+            $status,
+            $limit,
+            $offset
+        );
+
+        // Shape output for UI (include team slugs for linking)
+        $out = \array_map(static function (Fixture $m): array {
             return [
                 'id'      => $m->getId(),
                 'dateUtc' => $m->getDateUtc()->format(DATE_ATOM),
@@ -72,7 +100,15 @@ final class MatchApiController extends AbstractController
         }, $items);
 
         $res = $this->json($out);
-        // No caching while iterating on UI
+        // Disable caching during UI iteration
+        $res->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+
+        return $res;
+    }
+
+    private function badRequest(string $message): JsonResponse
+    {
+        $res = $this->json(['error' => $message], 400);
         $res->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         return $res;
     }

@@ -7,22 +7,28 @@
 <div class="card" style="display:grid;grid-template-columns:repeat(5, minmax(120px,1fr));gap:10px;align-items:end">
   <div>
     <label for="country">Country</label><br>
-    <select id="country"></select>
+    <select id="country" disabled>
+      <option value="">All</option>
+    </select>
   </div>
 
   <div>
     <label for="league">League</label><br>
-    <select id="league"></select>
+    <select id="league" disabled>
+      <option value="">All</option>
+    </select>
   </div>
 
   <div>
     <label for="season">Season</label><br>
-    <select id="season"></select>
+    <select id="season" disabled>
+      <option value="">All</option>
+    </select>
   </div>
 
   <div>
     <label for="date">Date (UTC)</label><br>
-    <input id="date" type="date" value="">
+    <input id="date" type="date" value="{{ today|default('') }}">
   </div>
 
   <div>
@@ -40,7 +46,6 @@
   <button id="btnToday" class="btn">Today</button>
   <button id="btnReset" class="btn" style="opacity:.85">Reset</button>
 
-  {# 🔗 League page button — enabled when a league is selected #}
   <a id="btnLeague" class="btn" href="#" style="margin-left:auto; opacity:.7; pointer-events:none">Open league page</a>
 </div>
 
@@ -54,6 +59,8 @@
 <div id="matches" class="card" style="margin-top:12px">
   <h3 style="margin:0 0 8px 0">Matches</h3>
   <p id="loading">Loading…</p>
+  <div id="matchList"></div>
+  <button id="btnMore" class="btn" style="margin-top:10px;display:none">Load 10 more</button>
 </div>
 
 <style>
@@ -74,6 +81,8 @@
 
 <script>
 (function(){
+  const PAGE_SIZE = 10;
+
   const preset = {
     country: {{ preset.country ? ('"~preset.country~"') : 'null' }},
     league:  {{ preset.league  ? ('"~preset.league~"')  : 'null' }},
@@ -88,12 +97,22 @@
     date:    document.getElementById('date'),
     status:  document.getElementById('status'),
     matches: document.getElementById('matches'),
+    list:    document.getElementById('matchList'),
     loading: document.getElementById('loading'),
     emptyNotice: document.getElementById('emptyNotice'),
     btnToday: document.getElementById('btnToday'),
     btnReset: document.getElementById('btnReset'),
     btnLeague: document.getElementById('btnLeague'),
+    btnMore: document.getElementById('btnMore'),
   };
+
+  let paging = { offset: 0, exhausted: false };
+
+  function resetPaging(){
+    paging.offset = 0;
+    paging.exhausted = false;
+    els.btnMore.style.display = 'none';
+  }
 
   function yearsList(nBack=5){
     const y = new Date().getUTCFullYear();
@@ -101,159 +120,202 @@
     for (let k = nBack; k >= 0; k--) arr.push(y - k);
     return arr;
   }
-  function groupByDate(rows){
-    const map = new Map();
-    for (const r of rows) {
-      const d = new Date(r.dateUtc);
-      const key = d.toISOString().slice(0,10);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(r);
-    }
-    return Array.from(map.entries()).sort(([a],[b]) => a.localeCompare(b));
-  }
+
   function fmtTime(iso){ return new Date(iso).toISOString().slice(11,16); }
 
   function updateLeagueButton(){
     const opt = els.league.selectedOptions[0];
-    if (!opt) {
+    if (!opt || !opt.dataset.slug) {
       els.btnLeague.classList.add('disabled');
       els.btnLeague.style.opacity = '.7';
       els.btnLeague.style.pointerEvents = 'none';
       els.btnLeague.href = '#';
       return;
     }
-    const leagueSlug = opt.dataset.slug;
-    const countrySlug = opt.dataset.countryslug;
-    
-    els.btnLeague.href = `/league/${leagueSlug}`;
+    els.btnLeague.href = `/league/${opt.dataset.slug}`;
     els.btnLeague.classList.remove('disabled');
     els.btnLeague.style.opacity = '1';
     els.btnLeague.style.pointerEvents = '';
   }
 
-  // Load Country/League options (filtered by Admin flags)
-  async function loadCountries(){
-    const res = await fetch('/api/countries', {headers:{'Accept':'application/json'}, cache:'no-store'});
-    const rows = await res.json();
-    if (!Array.isArray(rows) || rows.length === 0) {
-      els.emptyNotice.style.display = '';
-      els.loading.textContent = '—';
+  function renderMatches(rows, {append = false} = {}){
+    if (!append) els.list.innerHTML = '';
+    if (!rows.length && !append && els.list.children.length === 0) {
+      els.list.innerHTML = '<p>No matches for the selected filters.</p>';
+      els.btnMore.style.display = 'none';
       return;
     }
-    els.emptyNotice.style.display = 'none';
-    els.country.innerHTML = rows.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
-    if (preset.country) {
-      const opt = Array.from(els.country.options).find(o => o.value === preset.country);
-      if (opt) els.country.value = preset.country;
+    const html = [];
+    for (const r of rows) {
+      html.push(`
+        <div class="row">
+          <span class="when">${fmtTime(r.dateUtc)}</span>
+
+          <a class="team ellipsis team-link" href="/team/${r.home.slug}">
+            <img src="${r.home.logo||''}" alt="">
+            <span class="ellipsis">${r.home.name}</span>
+          </a>
+
+          <a class="score" href="/match/${r.id}" aria-label="Open match">
+            ${r.home.goals ?? ''} - ${r.away.goals ?? ''}
+          </a>
+
+          <a class="team ellipsis team-link" href="/team/${r.away.slug}" style="justify-self:end">
+            <span class="ellipsis" style="text-align:right">${r.away.name}</span>
+            <img src="${r.away.logo||''}" alt="">
+          </a>
+        </div>
+      `);
     }
-    await loadLeagues();
+    if (append) els.list.insertAdjacentHTML('beforeend', html.join(''));
+    else els.list.innerHTML = html.join('');
   }
 
-  async function loadLeagues(){
-    const cc = els.country.value;
-    if (!cc) { els.league.innerHTML = ''; updateLeagueButton(); return; }
-    const res = await fetch('/api/leagues?country='+encodeURIComponent(cc), {headers:{'Accept':'application/json'}, cache:'no-store'});
-    const rows = await res.json();
-
-    // store slug & countrySlug on the option for the League Page button
-    els.league.innerHTML = rows.map(l =>
-      `<option value="${l.id}" data-slug="${l.slug}" data-countryslug="${l.countrySlug}" data-season="${l.season}">${l.name}</option>`
-    ).join('');
-
-    // season select
-    const curSeason = (rows[0]?.season) ?? (new Date().getUTCFullYear());
-    const seasons = yearsList(5);
-    els.season.innerHTML = seasons.map(y => `<option value="${y}">${y}</option>`).join('');
-    els.season.value = preset.season ?? curSeason;
-
-    if (preset.league) {
-      const opt = Array.from(els.league.options).find(o => o.value === preset.league);
-      if (opt) els.league.value = preset.league;
-      preset.league = null; // consume once
-    }
-
-    updateLeagueButton();
-    await loadMatches();
-  }
-
-  // Render matches list with team links
-  function renderMatches(rows){
-    const groups = groupByDate(rows);
-    const html = ['<h3 style="margin:0 0 8px 0">Matches</h3>'];
-    if (!groups.length) {
-      html.push('<p>No matches for the selected filters.</p>');
-    } else {
-      for (const [day, items] of groups) {
-        html.push(`<h4 style="margin:10px 0 6px 0;opacity:.8">${day}</h4>`);
-        for (const r of items) {
-          html.push(`
-            <div class="row">
-              <span class="when">${fmtTime(r.dateUtc)}</span>
-
-              <a class="team ellipsis team-link" href="/team/${r.home.slug}">
-                <img src="${r.home.logo||''}" alt="">
-                <span class="ellipsis">${r.home.name}</span>
-              </a>
-
-              <a class="score" href="/match/${r.id}" aria-label="Open match">
-                ${r.home.goals ?? ''} - ${r.away.goals ?? ''}
-              </a>
-
-              <a class="team ellipsis team-link" href="/team/${r.away.slug}" style="justify-self:end">
-                <span class="ellipsis" style="text-align:right">${r.away.name}</span>
-                <img src="${r.away.logo||''}" alt="">
-              </a>
-            </div>
-          `);
-        }
-      }
-    }
-    els.matches.innerHTML = html.join('');
-  }
-
-  async function loadMatches(){
+  async function fetchMatchesPage(offset){
     els.loading && (els.loading.textContent = 'Loading…');
-    const league = els.league.value;
-    const season = els.season.value;
-    const date   = els.date.value;
-    const status = els.status.value;
 
-    const qs = new URLSearchParams({ league, season });
+    const league = els.league?.value || '';
+    const season = els.season?.value || '';
+    const date   = els.date?.value || '';
+    const status = els.status?.value || '';
+
+    const qs = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+    if (league) qs.set('league', league);
+    if (season) qs.set('season', season);
     if (date)   qs.set('date', date);
     if (status) qs.set('status', status);
 
     const res = await fetch('/api/matches?'+qs.toString(), {headers:{'Accept':'application/json'}, cache:'no-store'});
-    const rows = await res.json();
-    renderMatches(Array.isArray(rows) ? rows : []);
+    const rows = res.ok ? await res.json() : [];
+    els.loading && (els.loading.textContent = '');
+    return Array.isArray(rows) ? rows : [];
   }
 
-  // events
+  async function loadMatches({append = false} = {}){
+    if (!append) resetPaging();
+    const rows = await fetchMatchesPage(paging.offset);
+    renderMatches(rows, {append});
+    if (rows.length < PAGE_SIZE) {
+      paging.exhausted = true;
+      els.btnMore.style.display = 'none';
+    } else {
+      paging.offset += PAGE_SIZE;
+      els.btnMore.style.display = '';
+    }
+  }
+
+  // === Countries/Leagues (optional but enables the filters)
+  async function loadCountries(){
+    try {
+      const res = await fetch('/api/countries', {headers:{'Accept':'application/json'}, cache:'no-store'});
+      if (!res.ok) throw 0;
+      const rows = await res.json();
+      if (!Array.isArray(rows) || rows.length === 0) throw 0;
+
+      els.emptyNotice.style.display = 'none';
+      els.country.innerHTML = '<option value="">All</option>' +
+        rows.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+      els.country.disabled = false;
+
+      if (preset.country) {
+        const opt = Array.from(els.country.options).find(o => o.value === preset.country);
+        if (opt) els.country.value = preset.country;
+      }
+      await loadLeagues();
+      return;
+    } catch {
+      // fallback: enable filters but keep "All"
+      els.country.disabled = false;
+      els.league.disabled = false;
+      els.season.disabled = false;
+      await loadMatches({append:false});
+    }
+  }
+
+  async function loadLeagues(){
+    const cc = els.country.value;
+    if (!cc) {
+      // reset leagues and seasons to "All"
+      els.league.innerHTML = '<option value="">All</option>';
+      els.season.innerHTML = '<option value="">All</option>';
+      els.league.disabled = false;
+      els.season.disabled = false;
+      updateLeagueButton();
+      await loadMatches({append:false});
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/leagues?country='+encodeURIComponent(cc), {headers:{'Accept':'application/json'}, cache:'no-store'});
+      if (!res.ok) throw 0;
+      const rows = await res.json();
+
+      els.league.innerHTML = '<option value="">All</option>' +
+        (Array.isArray(rows) ? rows.map(l =>
+          `<option value="${l.id}" data-slug="${l.slug}" data-countryslug="${l.countrySlug}" data-season="${l.season}">${l.name}</option>`
+        ).join('') : '');
+      els.league.disabled = false;
+
+      const curSeason = (rows && rows[0]?.season) ?? (new Date().getUTCFullYear());
+      const seasons = yearsList(5);
+      els.season.innerHTML = '<option value="">All</option>' +
+        seasons.map(y => `<option value="${y}">${y}</option>`).join('');
+      els.season.disabled = false;
+      els.season.value = preset.season ?? curSeason;
+
+      if (preset.league) {
+        const opt = Array.from(els.league.options).find(o => o.value === preset.league);
+        if (opt) els.league.value = preset.league;
+        preset.league = null;
+      }
+
+      updateLeagueButton();
+      await loadMatches({append:false});
+    } catch {
+      // if leagues fail, just keep them as "All" and load matches
+      els.league.disabled = false;
+      els.season.disabled = false;
+      updateLeagueButton();
+      await loadMatches({append:false});
+    }
+  }
+
+  // === Events
   els.country.addEventListener('change', loadLeagues);
   ['league','season','date','status'].forEach(id => {
-    document.getElementById(id).addEventListener('change', (e) => {
+    document.getElementById(id).addEventListener('change', async (e) => {
       if (e.target === els.league) updateLeagueButton();
-      loadMatches();
+      await loadMatches({append:false});
     });
   });
-  els.btnToday.addEventListener('click', () => {
+  els.btnMore.addEventListener('click', async () => {
+    if (!paging.exhausted) await loadMatches({append:true});
+  });
+  els.btnToday.addEventListener('click', async () => {
     const d = new Date();
     const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
     els.date.value = utc.toISOString().slice(0,10);
-    loadMatches();
+    await loadMatches({append:false});
   });
   els.btnReset.addEventListener('click', async () => {
     preset.country = preset.league = preset.season = preset.status = null;
-    els.date.value = '{{ today }}';
-    await loadCountries();
+    els.country.value = '';
+    els.league.value = '';
+    els.season.value = '';
+    els.status.value = '';
+    els.date.value = '{{ today|default("") }}';
+    updateLeagueButton();
+    await loadMatches({append:false});
   });
 
-  // initial run
+  // === Initial run
   (async () => {
+    // honor preset status if provided
     if (preset.status) {
       const opt = Array.from(els.status.options).find(o => o.value === preset.status);
       if (opt) els.status.value = preset.status;
     }
-    await loadCountries();
+    await loadCountries(); // will call loadLeagues() or fallback to loadMatches()
   })();
 })();
 </script>

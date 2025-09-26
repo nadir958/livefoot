@@ -8,6 +8,9 @@ use App\Enum\MatchStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
+/**
+ * @extends ServiceEntityRepository<Fixture>
+ */
 final class FixtureRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
@@ -15,89 +18,87 @@ final class FixtureRepository extends ServiceEntityRepository
         parent::__construct($registry, Fixture::class);
     }
 
-    /** @return Fixture[] */
-    public function findPast(int $leagueId, int $season, \DateTimeImmutable $pivot, int $limit = 20): array
-    {
-        $qb = $this->createQueryBuilder('f')
-            ->andWhere('f.league = :l')
-            ->andWhere('f.season = :s')
-            ->andWhere('f.dateUtc < :p')
-            ->orderBy('f.dateUtc', 'DESC')
-            ->setMaxResults($limit);
-
-        $qb->setParameter('l', $leagueId);
-        $qb->setParameter('s', $season);
-        $qb->setParameter('p', $pivot);
-
-        return $qb->getQuery()->getResult();
-    }
-
-    /** @return Fixture[] */
-    public function findUpcoming(int $leagueId, int $season, \DateTimeImmutable $pivot, int $limit = 20): array
-    {
-        $qb = $this->createQueryBuilder('f')
-            ->andWhere('f.league = :l')
-            ->andWhere('f.season = :s')
-            ->andWhere('f.dateUtc >= :p')
-            ->orderBy('f.dateUtc', 'ASC')
-            ->setMaxResults($limit);
-
-        $qb->setParameter('l', $leagueId);
-        $qb->setParameter('s', $season);
-        $qb->setParameter('p', $pivot);
-
-        return $qb->getQuery()->getResult();
-    }
-
-    /** @return Fixture[] */
+    /**
+     * @param int|null                 $leagueId
+     * @param int|null                 $season
+     * @param \DateTimeImmutable|null  $dateUtcMidnight
+     * @param MatchStatus|null         $status
+     * @param int                      $limit
+     * @param int                      $offset
+     * @return Fixture[]
+     */
     public function findByFilters(
         ?int $leagueId,
         ?int $season,
-        ?\DateTimeImmutable $date = null,
-        ?MatchStatus $status = null
+        ?\DateTimeImmutable $dateUtcMidnight,
+        ?MatchStatus $status,
+        int $limit = 10,
+        int $offset = 0
     ): array {
-        $qb = $this->createQueryBuilder('f')->orderBy('f.dateUtc', 'ASC');
+        $qb = $this->createQueryBuilder('f')
+            ->leftJoin('f.league', 'l')->addSelect('l')
+            ->leftJoin('f.homeTeam', 'ht')->addSelect('ht')
+            ->leftJoin('f.awayTeam', 'at')->addSelect('at');
 
-        if ($leagueId) { $qb->andWhere('f.league = :l')->setParameter('l', $leagueId); }
-        if ($season)   { $qb->andWhere('f.season = :s')->setParameter('s', $season); }
-        if ($date) {
-            $start = $date->setTime(0,0,0);
-            $end   = $start->modify('+1 day');
-            $qb->andWhere('f.dateUtc >= :start')->setParameter('start', $start);
-            $qb->andWhere('f.dateUtc < :end')->setParameter('end', $end);
+        if ($leagueId) {
+            $qb->andWhere('l.id = :lid')->setParameter('lid', $leagueId);
         }
-        if ($status) { $qb->andWhere('f.status = :st')->setParameter('st', $status); }
+        if ($season) {
+            $qb->andWhere('f.season = :season')->setParameter('season', $season);
+        }
+        if ($dateUtcMidnight) {
+            $qb->andWhere('f.dateUtc >= :d0 AND f.dateUtc < :d1')
+               ->setParameter('d0', $dateUtcMidnight)
+               ->setParameter('d1', $dateUtcMidnight->modify('+1 day'));
+        }
+        if ($status) {
+            $qb->andWhere('f.status = :st')->setParameter('st', $status->value);
+        }
 
-        return $qb->getQuery()->getResult();
-    }
-
-    /** Team past matches strictly before now (UTC). @return Fixture[] */
-    public function findTeamPast(int $teamId, int $limit = 20): array
-    {
-        $qb = $this->createQueryBuilder('f')
-            ->andWhere('(f.homeTeam = :t OR f.awayTeam = :t)')
-            ->andWhere('f.dateUtc < :now')
-            ->orderBy('f.dateUtc', 'DESC')
-            ->setMaxResults($limit);
-
-        $qb->setParameter('t', $teamId);
-        $qb->setParameter('now', new \DateTimeImmutable('now', new \DateTimeZone('UTC')));
-
-        return $qb->getQuery()->getResult();
-    }
-
-    /** Team upcoming matches at/after now (UTC). @return Fixture[] */
-    public function findTeamUpcoming(int $teamId, int $limit = 20): array
-    {
-        $qb = $this->createQueryBuilder('f')
-            ->andWhere('(f.homeTeam = :t OR f.awayTeam = :t)')
-            ->andWhere('f.dateUtc >= :now')
+        return $qb
             ->orderBy('f.dateUtc', 'ASC')
-            ->setMaxResults($limit);
-
-        $qb->setParameter('t', $teamId);
-        $qb->setParameter('now', new \DateTimeImmutable('now', new \DateTimeZone('UTC')));
-
-        return $qb->getQuery()->getResult();
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
     }
+
+    public function findPast(
+        int $leagueId,
+        int $season,
+        \DateTimeImmutable $refDateUtc,
+        int $limit = 10
+    ): array {
+        return $this->createQueryBuilder('f')
+            ->leftJoin('f.league', 'l')->addSelect('l')
+            ->leftJoin('f.homeTeam', 'ht')->addSelect('ht')
+            ->leftJoin('f.awayTeam', 'at')->addSelect('at')
+            ->andWhere('l.id = :lid')->setParameter('lid', $leagueId)
+            ->andWhere('f.season = :season')->setParameter('season', $season)
+            ->andWhere('f.dateUtc < :ref')->setParameter('ref', $refDateUtc)
+            ->orderBy('f.dateUtc', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function findUpcoming(
+        int $leagueId,
+        int $season,
+        \DateTimeImmutable $refDateUtc,
+        int $limit = 10
+    ): array {
+        return $this->createQueryBuilder('f')
+            ->leftJoin('f.league', 'l')->addSelect('l')
+            ->leftJoin('f.homeTeam', 'ht')->addSelect('ht')
+            ->leftJoin('f.awayTeam', 'at')->addSelect('at')
+            ->andWhere('l.id = :lid')->setParameter('lid', $leagueId)
+            ->andWhere('f.season = :season')->setParameter('season', $season)
+            ->andWhere('f.dateUtc >= :ref')->setParameter('ref', $refDateUtc)
+            ->orderBy('f.dateUtc', 'ASC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
 }

@@ -56,8 +56,8 @@ final class FootballProvider
         }
 
         if (!\is_array($data) || !\array_key_exists('response', $data) || !\is_array($data['response'])) {
-            // Give visibility into the unexpected body (trimmed)
-            $preview = substr(json_encode($data, JSON_UNESCAPED_SLASHES), 0, 400) . (strlen(json_encode($data)) > 400 ? '…' : '');
+            $previewJson = json_encode($data, JSON_UNESCAPED_SLASHES);
+            $preview = substr((string)$previewJson, 0, 400) . ((strlen((string)$previewJson) > 400) ? '…' : '');
             throw new \RuntimeException("Unexpected API shape (missing 'response'). Body preview: {$preview}");
         }
 
@@ -81,14 +81,47 @@ final class FootballProvider
         };
     }
 
+    /** ---------------------------
+     * Internal: map one fixtures row
+     * --------------------------- */
+    private static function mapFixtureRow(array $row): array
+    {
+        $fx     = $row['fixture'] ?? [];
+        $teams  = $row['teams']   ?? [];
+        $home   = $teams['home']  ?? [];
+        $away   = $teams['away']  ?? [];
+        $goals  = $row['goals']   ?? [];
+        $league = $row['league']  ?? [];
+        $short  = $fx['status']['short'] ?? null;
+        $long   = $fx['status']['long']  ?? null;
+
+        return [
+            'externalId' => (int)($fx['id'] ?? 0),
+            'dateUtc'    => (string)($fx['date'] ?? ''),
+            'status'     => self::mapStatus($short, $long),
+            'round'      => self::norm($fx['round'] ?? null),         // sometimes present in fixture
+            'stage'      => self::norm($league['round'] ?? null),     // often present here
+            'venue'      => self::norm($fx['venue']['name'] ?? null),
+            'home'       => [
+                'id'    => (int)($home['id'] ?? 0),
+                'name'  => (string)($home['name'] ?? ''),
+                'logo'  => self::norm($home['logo'] ?? null),
+                'goals' => array_key_exists('home', $goals) ? (int)$goals['home'] : null,
+            ],
+            'away'       => [
+                'id'    => (int)($away['id'] ?? 0),
+                'name'  => (string)($away['name'] ?? ''),
+                'logo'  => self::norm($away['logo'] ?? null),
+                'goals' => array_key_exists('away', $goals) ? (int)$goals['away'] : null,
+            ],
+        ];
+    }
+
     /* =======================
        Public API mappers
        ======================= */
 
-    /**
-     * GET /countries
-     * Response: { response: [ { name, code, flag }, ... ] }
-     */
+    /** GET /countries */
     public function getCountries(): array
     {
         $rows = $this->getResponse('/countries');
@@ -97,7 +130,6 @@ final class FootballProvider
             $code = (string)($row['code'] ?? '');
             $name = (string)($row['name'] ?? '');
             $flag = self::norm($row['flag'] ?? null);
-
             return [
                 'code' => $code,
                 'name' => $name,
@@ -106,10 +138,7 @@ final class FootballProvider
         }, $rows), static fn($x) => ($x['code'] ?? '') !== '' || ($x['name'] ?? '') !== ''));
     }
 
-    /**
-     * GET /leagues?code=FR
-     * Response: { response: [ { league:{id,name,type,logo}, country:{code}, seasons:[{year}...] }, ... ] }
-     */
+    /** GET /leagues?code=FR */
     public function getLeaguesByCountry(string $code): array
     {
         $rows = $this->getResponse('/leagues', ['code' => strtoupper($code)]);
@@ -136,10 +165,7 @@ final class FootballProvider
         }, $rows));
     }
 
-    /**
-     * GET /teams?league={id}&season={year}
-     * Response: { response: [ { team:{id,name,code,logo,country} }, ... ] }
-     */
+    /** GET /teams?league={id}&season={year} */
     public function getTeamsByLeagueSeason(int $leagueId, int $season): array
     {
         $rows = $this->getResponse('/teams', ['league' => $leagueId, 'season' => $season]);
@@ -167,36 +193,30 @@ final class FootballProvider
 
         $rows = $this->getResponse('/fixtures', $q);
 
-        return array_values(array_map(static function ($row) {
-            $fx     = $row['fixture'] ?? [];
-            $teams  = $row['teams']   ?? [];
-            $home   = $teams['home']  ?? [];
-            $away   = $teams['away']  ?? [];
-            $goals  = $row['goals']   ?? [];
-            $league = $row['league']  ?? [];
-            $short  = $fx['status']['short'] ?? null;
-            $long   = $fx['status']['long']  ?? null;
+        return array_values(array_map(self::mapFixtureRow(...), $rows));
+    }
 
-            return [
-                'externalId' => (int)($fx['id'] ?? 0),
-                'dateUtc'    => (string)($fx['date'] ?? ''),
-                'status'     => self::mapStatus($short, $long),
-                'round'      => self::norm($fx['round'] ?? null),         // sometimes present in fixture
-                'stage'      => self::norm($league['round'] ?? null),     // often present here
-                'venue'      => self::norm($fx['venue']['name'] ?? null),
-                'home'       => [
-                    'id'    => (int)($home['id'] ?? 0),
-                    'name'  => (string)($home['name'] ?? ''),
-                    'logo'  => self::norm($home['logo'] ?? null),
-                    'goals' => array_key_exists('home', $goals) ? (int)$goals['home'] : null,
-                ],
-                'away'       => [
-                    'id'    => (int)($away['id'] ?? 0),
-                    'name'  => (string)($away['name'] ?? ''),
-                    'logo'  => self::norm($away['logo'] ?? null),
-                    'goals' => array_key_exists('away', $goals) ? (int)$goals['away'] : null,
-                ],
-            ];
-        }, $rows));
+    /**
+     * NEW: GET /fixtures?id={fixtureId}
+     * Returns a single mapped match or null if not found.
+     */
+    public function getMatchByExternalId(int $fixtureId): ?array
+    {
+        $rows = $this->getResponse('/fixtures', ['id' => $fixtureId]);
+        if (!\is_array($rows) || count($rows) === 0) {
+            return null;
+        }
+        // API returns one row in "response" when using ?id=...
+        return self::mapFixtureRow($rows[0]);
+    }
+
+    /**
+     * (Optional helper) GET /fixtures?date=YYYY-MM-DD
+     * Useful as a wide fallback when league/season filters miss some events.
+     */
+    public function getMatchesByDate(string $dateYmd): array
+    {
+        $rows = $this->getResponse('/fixtures', ['date' => $dateYmd]);
+        return array_values(array_map(self::mapFixtureRow(...), $rows));
     }
 }

@@ -54,10 +54,39 @@ final class FixtureRepository extends ServiceEntityRepository
         if ($status) {
             $qb->andWhere('f.status = :st')->setParameter('st', $status->value);
         }
+        return $qb->getQuery()->getResult();
+    }
 
-        return $qb
+    /** Team past matches strictly before now (UTC). @return Fixture[] */
+    public function findTeamPast(int $teamId, int $limit = 20): array
+    {
+        $qb = $this->createQueryBuilder('f')
+            ->andWhere('(f.homeTeam = :t OR f.awayTeam = :t)')
+            ->andWhere('f.dateUtc < :now')
+            ->orderBy('f.dateUtc', 'DESC')
+            ->setMaxResults($limit);
+
+        $qb->setParameter('t', $teamId);
+        $qb->setParameter('now', new \DateTimeImmutable('now', new \DateTimeZone('UTC')));
+
+        return $qb->getQuery()->getResult();
+    }
+
+    /** @return Fixture[] */
+    public function findTeamUpcoming(
+        int $teamId,
+        int $season,
+        \DateTimeImmutable $refDateUtc,
+        int $limit = 10
+    ): array {
+        return $this->createQueryBuilder('f')
+            ->leftJoin('f.league', 'l')->addSelect('l')
+            ->leftJoin('f.homeTeam', 'ht')->addSelect('ht')
+            ->leftJoin('f.awayTeam', 'at')->addSelect('at')
+            ->andWhere('(ht.id = :tid OR at.id = :tid)')->setParameter('tid', $teamId)
+            ->andWhere('f.season = :season')->setParameter('season', $season)
+            ->andWhere('f.dateUtc >= :ref')->setParameter('ref', $refDateUtc)
             ->orderBy('f.dateUtc', 'ASC')
-            ->setFirstResult($offset)
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();
@@ -100,5 +129,6 @@ final class FixtureRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
 
 }

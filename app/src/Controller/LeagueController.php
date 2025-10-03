@@ -32,7 +32,7 @@ final class LeagueController extends AbstractController
         $tab    = (string)$r->query->get('tab', 'standings');
 
         $today    = new \DateTimeImmutable('today', new \DateTimeZone('UTC'));
-        $past     = $this->fixtures->findPast($league->getId(), $season, $today, 10);
+        $past     = $this->fixtures->findPast($league->getId(), $season, $today, 50);
         $upcoming = $this->fixtures->findUpcoming($league->getId(), $season, $today, 10);
 
         return $this->render('league/show.html.twig', compact('league', 'season', 'tab', 'past', 'upcoming'));

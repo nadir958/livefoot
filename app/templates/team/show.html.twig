@@ -2,6 +2,7 @@
 {% block title %}{{ team.name }}{% endblock %}
 
 {% block body %}
+{% include 'partials/topbar.html.twig' %}
 <header style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
   {% if team.logo %}
     <img src="{{ team.logo }}" alt="" style="width:44px;height:44px;object-fit:contain;border-radius:6px;background:#0b0f14;border:1px solid #1f2937">

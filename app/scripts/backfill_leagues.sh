@@ -11,7 +11,7 @@ END_YEAR=$YEAR_NOW
 
 SLEEP_BETWEEN_COUNTRIES="${SLEEP_BETWEEN_COUNTRIES:-0.5}"
 SLEEP_BETWEEN_LEAGUES="${SLEEP_BETWEEN_LEAGUES:-0.5}"
-SLEEP_BETWEEN_YEARS="${SLEEP_BETWEEN_YEARS:-120}"
+SLEEP_BETWEEN_YEARS="${SLEEP_BETWEEN_YEARS:-60}"
 
 # Always use absolute path to console
 run() { docker exec sofascore_php bash -lc "php /var/www/app/bin/console $*"; }

@@ -75,6 +75,10 @@ final class MatchApiController extends AbstractController
 
         // Shape output for UI (include team slugs for linking)
         $out = \array_map(static function (Fixture $m): array {
+
+            $status = is_string($m->getStatus()) ? $m->getStatus() : $m->getStatus()->value; // if enum, adapt
+            $homeGoals = $status === 'finished' ? $m->getHomeScore() : null;
+            $awayGoals = $status === 'finished' ? $m->getAwayScore() : null;
             return [
                 'id'      => $m->getId(),
                 'dateUtc' => $m->getDateUtc()->format(DATE_ATOM),
@@ -87,14 +91,14 @@ final class MatchApiController extends AbstractController
                     'slug'  => $m->getHomeTeam()->getSlug(),
                     'name'  => $m->getHomeTeam()->getName(),
                     'logo'  => $m->getHomeTeam()->getLogo(),
-                    'goals' => $m->getHomeScore(),
+                    'goals' => $homeGoals,
                 ],
                 'away'    => [
                     'id'    => $m->getAwayTeam()->getId(),
                     'slug'  => $m->getAwayTeam()->getSlug(),
                     'name'  => $m->getAwayTeam()->getName(),
                     'logo'  => $m->getAwayTeam()->getLogo(),
-                    'goals' => $m->getAwayScore(),
+                    'goals' => $awayGoals,
                 ],
             ];
         }, $items);

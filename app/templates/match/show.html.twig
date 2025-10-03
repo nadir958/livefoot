@@ -1,7 +1,8 @@
 {% extends 'base.html.twig' %}
 {% block title %}Match {{ m.homeTeam.name }} - {{ m.awayTeam.name }}{% endblock %}
 {% block body %}
-<div class="card" id="match-card" data-id="{{ m.id }}">
+{% include 'partials/topbar.html.twig' %}
+<div class="card" id="match-card" data-id="{{ m.id }}" style="text-align:center">
   <h2 style="margin:0 0 12px 0">
     <span id="homeName">{{ m.homeTeam.name }}</span> vs <span id="awayName">{{ m.awayTeam.name }}</span>
     <span id="statusBadge" class="badge status {{ m.status.value }}">{{ m.status.value }}</span>

@@ -2,9 +2,10 @@
 {% block title %}Live Foot — Home{% endblock %}
 
 {% block body %}
+{% include 'partials/topbar.html.twig' %}
 <h2 style="margin:0 0 12px 0">Browse matches</h2>
 
-<div class="card" style="display:grid;grid-template-columns:repeat(5, minmax(120px,1fr));gap:10px;align-items:end">
+<div class="card home-filters" style="display:grid;grid-template-columns:repeat(5, minmax(120px,1fr));gap:10px;align-items:end">
   <div>
     <label for="country">Country</label><br>
     <select id="country" disabled>

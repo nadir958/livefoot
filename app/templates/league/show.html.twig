@@ -3,6 +3,8 @@
 {% block title %}{{ league.name }} — {{ season }}{% endblock %}
 
 {% block body %}
+{% include 'partials/topbar.html.twig' %}
+
 <header style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
   {% if league.logo %}
     <img src="{{ league.logo }}" alt="" style="width:36px;height:36px;object-fit:contain;border-radius:6px;background:#0b0f14;border:1px solid #1f2937">

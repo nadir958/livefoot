@@ -30,8 +30,8 @@ final class ImportLeaguesCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io     = new SymfonyStyle($input, $output);
-        $code   = strtoupper((string)$input->getOption('country'));
+        $io   = new SymfonyStyle($input, $output);
+        $code = strtoupper((string)$input->getOption('country'));
         if ($code === '') {
             $io->error('--country=ISO2 is required (e.g. --country=FR)');
             return Command::INVALID;
@@ -74,21 +74,52 @@ final class ImportLeaguesCommand extends Command
             $l->setSeasonCurrent($season);
             $l->setLogo($logo);
 
-            if (($l->getSlug() ?? '') === '') {
-                $slug = $slugger->slug($name)->lower()->toString();
-                if ($slug === '') { $slug = 'league-'.$extId; }
-                $l->setSlug($slug);
-            }
+            // --- Robust slug generation: ensure uniqueness even if another country has same name ---
+            $slug = $l->getSlug() ?: $slugger->slug($name)->lower()->toString();
+            if ($slug === '') { $slug = 'league-'.$extId; }
+
+            // Ensure slug uniqueness globally (DB currently has unique on slug)
+            $slug = $this->ensureUniqueLeagueSlug($slug, $repo, $l->getId(), $code);
+
+            $l->setSlug($slug);
+            // ----------------------------------------------------------------------
 
             $this->em->persist($l);
             $isNew ? $created++ : $updated++;
 
-            if ((++$i % 200) === 0) { $this->em->flush(); $this->em->clear(); }
+            if ((++$i % 200) === 0) {
+                $this->em->flush();
+                $this->em->clear();
+                // Rehydrate repository after clear()
+                $repo = $this->em->getRepository(League::class);
+            }
         }
 
         $this->em->flush();
 
         $io->success(sprintf('Leagues[%s]: +%d / ~%d', $code, $created, $updated));
         return Command::SUCCESS;
+    }
+
+    /**
+     * Ensure the league slug is unique even with a global UNIQUE(slug).
+     * - If slug exists for a different league, append "-{country}".
+     * - If still exists, append "-{country}-{n}".
+     */
+    private function ensureUniqueLeagueSlug(string $base, $repo, ?int $currentId, string $countryIso2): string
+    {
+        $slug = $base;
+        $taken = $repo->findOneBy(['slug' => $slug]);
+
+        if ($taken && $taken->getId() !== $currentId) {
+            $slug = $base . '-' . strtolower($countryIso2); // e.g., super-cup-fr
+            $n = 2;
+            while (($hit = $repo->findOneBy(['slug' => $slug])) && $hit->getId() !== $currentId) {
+                $slug = $base . '-' . strtolower($countryIso2) . '-' . $n; // super-cup-fr-2
+                $n++;
+            }
+        }
+
+        return $slug;
     }
 }
